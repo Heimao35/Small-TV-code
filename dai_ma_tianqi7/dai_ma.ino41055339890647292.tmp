@@ -1,0 +1,36 @@
+#include <Arduino.h>
+#include <TFT_eSPI.h>
+#include <SPI.h>
+#include <ESP8266WiFi.h>
+#include <ESP8266WebServer.h>
+#include <WiFiManager.h>
+#include "p1.h"
+
+
+
+
+void setup() {
+  
+  WiFiManager wifiManager;
+  Serial.begin(115200);
+  wifiManager.autoConnect("Hei_Mao35_XiaoDianShi");
+  Serial.println("");
+  Serial.print("ESP8266 Connected to ");
+  Serial.println(WiFi.SSID());              // WiFi名称
+  Serial.print("IP address:\t");
+  Serial.println(WiFi.localIP());// IP
+  
+  TFT_eSPI tft = TFT_eSPI;// 创建TFT对象
+  tft.init();
+  tft.setRotation(0); // 设置屏幕方向
+  tft.fillScreen(TFT_BLACK); // 清屏
+  tft.setSwapBytes(true);
+
+  // 显示图片
+  tft.pushImage(0, 0, 240, 240,p1);
+}
+
+
+void loop() {
+  // 不需要在loop中执行任何操作
+}
