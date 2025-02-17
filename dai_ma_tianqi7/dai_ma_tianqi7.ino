@@ -23,7 +23,7 @@ Page currentPage = IMAGE; // 当前页面状态
 bool backgroundUpdated = false; // 用于跟踪背景颜色是否已更新
 
 // 心知天气API配置
-String reqUserKey = "在这粘贴你的密钥";   // 私钥
+String reqUserKey = "SDRJJxPXtJECm393W";   // 私钥
 String reqLocation = "Beijing";            // 城市
 String reqUnit = "c";                      // 摄氏/华氏
 
@@ -33,9 +33,13 @@ Forecast forecast; // 建立Forecast对象用于获取心知天气信息
 // 添加天气更新时间控制
 unsigned long lastWeatherUpdate = 0;
 const unsigned long weatherUpdateInterval = 3600000; // 一小时 = 3600000毫秒
-
+//ip地址更新时间
 unsigned long lastLocationUpdate = 0;
 const unsigned long locationUpdateInterval = 3600000;
+//时间显示刷新时间间隔
+unsigned long lastTimeUpdate = 0;
+const unsigned long TIME_UPDATE_INTERVAL = 1000; // 1秒更新一次
+
 
 const char* effects[] = {//随机事件词条
   "DEAD GO BOOM",//
@@ -54,6 +58,13 @@ const unsigned long effectUpdateInterval = 20000; // 20秒
 int currentEffect = 0;
 int rdcns = 0;//彩蛋随机变量
 int upcns = false;//彩蛋背景更新变量
+
+// 休眠模式相关变量
+unsigned long lastActivityTime = 0;
+const unsigned long SLEEP_TIMEOUT = 60000; // 1分钟无操作后进入休眠
+bool isInSleepMode = false;
+
+void updateTimeDisplay(bool updateBackground);
 
 void setup() {
   Serial.begin(115200);
@@ -74,7 +85,7 @@ void setup() {
   tft.setTextColor(TFT_BLUE);
   tft.setTextSize(2);
   tft.printf("Connected to WiFi");
-  tft.setCursor(100,170 );
+  tft.setCursor(100, 170 );
   tft.printf(".");
   //开始连接wifi
   WiFiManager wifiManager;
@@ -83,7 +94,7 @@ void setup() {
   tft.printf(".");
   Serial.println("Connected to WiFi");
   tft.printf(".");
-  
+
 
   // 获取位置信息
   updateLocationByIP();
@@ -103,6 +114,7 @@ void setup() {
   // 初始获取一次天气信息
   getWeather();
   lastWeatherUpdate = millis();
+  lastActivityTime = millis(); // 初始化最后活动时间
 
   randomSeed(analogRead(0));
 
@@ -120,10 +132,44 @@ void loop() {
 
   // 检查按键状态
   if (digitalRead(buttonPin) == LOW) { // 按键按下
-    currentPage = static_cast<Page>((currentPage + 1) % 4); // 改为4个页面
-    backgroundUpdated = false;
+    lastActivityTime = currentTime; // 更新最后活动时间
+    if (isInSleepMode) {
+      // 从休眠模式唤醒
+      isInSleepMode = false;
+      WiFi.mode(WIFI_STA); // 重新启用WiFi
+      WiFi.setSleepMode(WIFI_NONE_SLEEP); // 禁用WiFi休眠
+      // 不需要强制更新显示，保持原有内容
+    } else {
+      currentPage = static_cast<Page>((currentPage + 1) % 4);
+      backgroundUpdated = false;
+    }
     delay(300);
   }
+
+  // 检查是否需要进入休眠模式
+  if (!isInSleepMode && (currentTime - lastActivityTime >= SLEEP_TIMEOUT)) {
+    // 进入休眠模式
+    isInSleepMode = true;
+    // 不清空屏幕，保持显示内容
+    WiFi.setSleepMode(WIFI_LIGHT_SLEEP); // 设置WiFi休眠模式
+    return; // 跳过其余循环
+  }
+
+  // 如果在休眠模式中，跳过不必要的更新操作
+  if (isInSleepMode) {
+    // 在休眠模式下，只在TIME页面时更新时间显示（如果需要的话）
+    if (currentPage == TIME) {
+      // 可以降低时间更新频率
+      static unsigned long lastTimeUpdate = 0;
+      if (currentTime - lastTimeUpdate >= 10000) { // 10秒更新一次
+        updateTimeDisplay(false); // 需要新建这个函数来更新时间
+        lastTimeUpdate = currentTime;
+      }
+    }
+    delay(100);
+    return;
+  }
+
 
   // 检查是否需要更新天气信息
   if (currentTime - lastWeatherUpdate >= weatherUpdateInterval) {
@@ -138,7 +184,7 @@ void loop() {
       backgroundUpdated = true;
 
       // 随机选择 p_1 或 p_2 显示
-      currentEffect = random(0,4); // 0 表示 p_1，1 表示 p_2，2表示p_3，3表示p_4
+      currentEffect = random(0, 4); // 0 表示 p_1，1 表示 p_2，2表示p_3，3表示p_4
       rdcns = random(0, 15);//彩蛋概率
     }
 
@@ -161,13 +207,13 @@ void loop() {
         tft.setTextColor(TFT_BLUE);
         //tft.pushImage(xOffset, yOffset, imageWidth, imageHeight, cns);
         tft.setTextSize(2);
-        tft.setCursor(20,20);
+        tft.setCursor(20, 20);
         tft.printf("GOOD EVENING ! \n");
         tft.printf("THIS BROADCAST HAS BEEN HACKED BY CNS \n");
         tft.printf("[ONE NIGHT, THREE DAWNS \n");
         tft.printf("SEE THE SIGNS] \n");
         upcns = false;
-      } else {        
+      } else {
         if (!upcns) {
           tft.fillScreen(TFT_BLACK);
           upcns = true; // 标记彩蛋背景已更新
@@ -183,50 +229,14 @@ void loop() {
     if (!backgroundUpdated) {
       tft.fillScreen(TFT_RED); // 设置背景为红色
       backgroundUpdated = true; // 标记背景已更新
+      updateTimeDisplay(true); // 立即更新时间显示，true表示包含背景
     }
 
-    // 获取当前时间
-    struct tm timeinfo;
-    if (!getLocalTime(&timeinfo)) {
-      Serial.println("Failed to obtain time");
-      return;
+
+    if (currentTime - lastTimeUpdate >= TIME_UPDATE_INTERVAL) {
+      updateTimeDisplay(false); // false表示不更新背景
+      lastTimeUpdate = currentTime;
     }
-
-    // 设置文本颜色和大小
-    tft.setTextColor(TFT_WHITE);
-    tft.setTextSize(3); // 调大字体
-
-    // 显示日期
-    char dateStr[20];
-    sprintf(dateStr, "%04d-%02d-%02d",
-            timeinfo.tm_year + 1900,
-            timeinfo.tm_mon + 1,
-            timeinfo.tm_mday);
-
-    int dateWidth = tft.textWidth(dateStr); // 获取日期文本的宽度
-    int dateX = (240 - dateWidth) / 2; // 计算居中位置
-    int dateY = 80; // 日期的Y坐标
-
-    // 绘制黑色背景
-    tft.fillRect(0, dateY - 20, 240, 80, TFT_BLACK); // 上方黑色背景
-    tft.setCursor(dateX, dateY); // 设置光标位置
-    tft.print(dateStr);
-
-    // 显示时间
-    char timeStr[20];
-    sprintf(timeStr, "%02d:%02d:%02d",
-            timeinfo.tm_hour,
-            timeinfo.tm_min,
-            timeinfo.tm_sec);
-
-    int timeWidth = tft.textWidth(timeStr); // 获取时间文本的宽度
-    int timeX = (240 - timeWidth) / 2; // 计算居中位置
-    int timeY = 140; // 时间的Y坐标
-
-    // 绘制黑色背景
-    tft.fillRect(0, timeY - 40, 240, 80, TFT_BLACK); // 下方黑色背景
-    tft.setCursor(timeX, timeY); // 设置光标位置
-    tft.print(timeStr);
   } else if (currentPage == WEATHER) {
     // 切换至显示天气界面时，绘制七个颜色块
     if (!backgroundUpdated) {
@@ -266,6 +276,9 @@ void drawWeatherBackground() {//显示彩屏背景函数
 }
 
 void displayWeather() {//天气显示函数
+
+  if (isInSleepMode) return; // 休眠模式下不更新显示
+
   int rectWidth = 240; // 矩形宽度
   int rectHeight = 120; // 矩形高度
   int rectX = (240 - rectWidth) / 2; // 矩形X坐标
@@ -298,6 +311,9 @@ void displayWeather() {//天气显示函数
 }
 
 void getWeather() {//获取天气信息函数
+
+  if (isInSleepMode) return; // 休眠模式下不更新显示
+
   if (WiFi.status() == WL_CONNECTED) {
     if (weatherNow.update() && forecast.update()) { // 检查请求是否成功
       if (currentPage == WEATHER) {
@@ -312,6 +328,9 @@ void getWeather() {//获取天气信息函数
 }
 
 void displayEffect() {//显示随机词条函数
+
+  if (isInSleepMode) return; // 休眠模式下不更新显示
+  
   int rectWidth = 240;
   int rectHeight = 120;
   int rectX = (240 - rectWidth) / 2;
@@ -427,6 +446,9 @@ void startupAnimation() {//开机动画函数
 }
 
 void updateLocationByIP() {//根据ip地址获取天气信息
+
+  if (isInSleepMode) return; // 休眠模式下不更新显示
+
   if (WiFi.status() == WL_CONNECTED) {
     HTTPClient http;
     WiFiClient client;
@@ -464,4 +486,57 @@ void updateLocationByIP() {//根据ip地址获取天气信息
 
     http.end();
   }
+}
+
+void updateTimeDisplay(bool updateBackground) {
+  struct tm timeinfo;
+  if (!getLocalTime(&timeinfo)) {
+    return;
+  }
+
+  // 设置文本颜色和大小
+  tft.setTextColor(TFT_WHITE);
+  tft.setTextSize(3);
+
+  // 显示日期
+  char dateStr[20];
+  sprintf(dateStr, "%04d-%02d-%02d",
+          timeinfo.tm_year + 1900,
+          timeinfo.tm_mon + 1,
+          timeinfo.tm_mday);
+
+  int dateWidth = tft.textWidth(dateStr);
+  int dateX = (240 - dateWidth) / 2;
+  int dateY = 80;
+
+  // 只在需要时更新背景
+  if (updateBackground) {
+    tft.fillRect(0, dateY - 20, 240, 80, TFT_BLACK);
+  } else {
+    // 仅清除文本区域
+    tft.fillRect(dateX - 5, dateY - 5, dateWidth + 10, 40, TFT_BLACK);
+  }
+  tft.setCursor(dateX, dateY);
+  tft.print(dateStr);
+
+  // 显示时间
+  char timeStr[20];
+  sprintf(timeStr, "%02d:%02d:%02d",
+          timeinfo.tm_hour,
+          timeinfo.tm_min,
+          timeinfo.tm_sec);
+
+  int timeWidth = tft.textWidth(timeStr);
+  int timeX = (240 - timeWidth) / 2;
+  int timeY = 140;
+
+  // 只在需要时更新背景
+  if (updateBackground) {
+    tft.fillRect(0, timeY - 40, 240, 80, TFT_BLACK);
+  } else {
+    // 仅清除文本区域
+    tft.fillRect(timeX - 5, timeY - 5, timeWidth + 10, 40, TFT_BLACK);
+  }
+  tft.setCursor(timeX, timeY);
+  tft.print(timeStr);
 }
