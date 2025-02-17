@@ -23,7 +23,7 @@ Page currentPage = IMAGE; // 当前页面状态
 bool backgroundUpdated = false; // 用于跟踪背景颜色是否已更新
 
 // 心知天气API配置
-String reqUserKey = "SDRJJxPXtJECm393W";   // 私钥
+String reqUserKey = "在这里粘贴密钥";   // 私钥
 String reqLocation = "Beijing";            // 城市
 String reqUnit = "c";                      // 摄氏/华氏
 
