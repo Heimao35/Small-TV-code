@@ -23,7 +23,7 @@ Page currentPage = IMAGE; // 当前页面状态
 bool backgroundUpdated = false; // 用于跟踪背景颜色是否已更新
 
 // 心知天气API配置
-String reqUserKey = "SDRJJxPXtJECm393W";   // 私钥
+String reqUserKey = "在这粘贴你的密钥";   // 私钥
 String reqLocation = "Beijing";            // 城市
 String reqUnit = "c";                      // 摄氏/华氏
 
@@ -66,9 +66,24 @@ void setup() {
   pinMode(buttonPin, INPUT_PULLUP);
 
   // 使用WiFiManager进行WiFi配置
+  //开机显示页面
+  drawWeatherBackground();
+  tft.fillRect(0, 60, 240, 130, TFT_BLACK);
+  tft.pushImage(21, 76, 198, 49, cns);
+  tft.setCursor(20, 150);
+  tft.setTextColor(TFT_BLUE);
+  tft.setTextSize(2);
+  tft.printf("Connected to WiFi");
+  tft.setCursor(100,170 );
+  tft.printf(".");
+  //开始连接wifi
   WiFiManager wifiManager;
+  tft.printf(".");
   wifiManager.autoConnect("xX_TF_CNS_CeratopSID_06_Xx");
+  tft.printf(".");
   Serial.println("Connected to WiFi");
+  tft.printf(".");
+  
 
   // 获取位置信息
   updateLocationByIP();
@@ -124,7 +139,7 @@ void loop() {
 
       // 随机选择 p_1 或 p_2 显示
       currentEffect = random(0,4); // 0 表示 p_1，1 表示 p_2，2表示p_3，3表示p_4
-      rdcns = random(0, 21);//彩蛋概率
+      rdcns = random(0, 15);//彩蛋概率
     }
 
     // 根据选择的图片设置宽度和高度
@@ -135,7 +150,7 @@ void loop() {
     int xOffset = (240 - imageWidth) / 2; // 水平居中
     int yOffset = (240 - imageHeight) / 2; // 垂直居中
 
-    if (rdcns == 10) {//彩蛋触发
+    if (rdcns == 5) {//彩蛋触发
       imageWidth = 198;
       imageHeight = 49;
       xOffset = (240 - imageWidth) / 2; // 水平居中
